@@ -2,18 +2,36 @@
 This is the core logic for the walkthrough xblock, which introduces students to
 a course through a digital tour.
 """
+import json
+import os
+from xml.dom import minidom
 import pkg_resources
-from xblock.core import XBlock
-from xblock.fields import Integer, Scope, String, List, Float
-from xblock.fragment import Fragment
-from django.template import Context, Template
+from django.template import Context
 from django.template.loader import get_template
+from lxml import etree
+from xblock.core import XBlock
+from xblock.fields import Scope, String
+from xblock.fragment import Fragment
 from xblockutils.studio_editable import StudioEditableXBlockMixin
+import xmltodict
+
 
 def _resource_string(path):
     """Handy helper for getting resources from our kit."""
     data = pkg_resources.resource_string(__name__, path)
     return data.decode("utf8")
+
+
+def _load_resource(resource_path):
+    """
+    Gets the content of a resource
+    """
+    resource_content = pkg_resources.resource_string(
+        __name__,
+        resource_path,
+    )
+    return unicode(resource_content)
+
 
 class WalkthroughXBlock(XBlock, StudioEditableXBlockMixin):
     """
@@ -31,16 +49,17 @@ class WalkthroughXBlock(XBlock, StudioEditableXBlockMixin):
     intro = String(
         display_name=('Introduction text'),
         help=('This is the introduction that will precede the button'
-            ' and explain its presence to the user'),
-        default='Click the button below to learn how to navigate the platform!',
+              ' and explain its presence to the user'),
+        default=('Click the button below to learn how to navigate the '
+                 'platform!'),
         scope=Scope.settings,
     )
 
-    steps = List(
+    steps = String(
         display_name=('Steps in the walkthrough'),
         help=('Data representing the steps that the XBlock goes through'),
-        default=[{'step': 1, 'message':'help'}],
-        scope=Scope.settings,
+        default=_load_resource('walkthrough.xml'),
+        scope=Scope.content,
     )
 
     editable_fields = (
@@ -50,13 +69,30 @@ class WalkthroughXBlock(XBlock, StudioEditableXBlockMixin):
     )
 
     def build_fragment(
-        self,
-        template,
-        contect_dict,
+            self,
+            template,
+            context_dict,
     ):
-        context = Context(contect_dict)
+        """
+        Build the fragment by passing the context into the template
+        """
+        context = Context(context_dict)
         fragment = Fragment(template.render(context))
         return fragment
+
+    def xml_to_json(self):
+        """
+        Convert steps from xml to json
+        """
+        final_steps = []
+        doc = xmltodict.parse(self.steps)
+        steps = doc['walkthrough']['step']
+        if isinstance(steps, list):
+            for step in doc['walkthrough']['step']:
+                final_steps.append(json.dumps(dict(step)))
+        else:
+            final_steps.append(json.dumps(dict(steps)))
+        return json.dumps(final_steps)
 
     def student_view(self, context=None):
         """
@@ -68,6 +104,7 @@ class WalkthroughXBlock(XBlock, StudioEditableXBlockMixin):
             {
                 'button_label': self.button_label,
                 'intro': self.intro,
+                'steps': self.xml_to_json(),
             }
         )
         template = get_template('walkthrough.html')
@@ -80,22 +117,11 @@ class WalkthroughXBlock(XBlock, StudioEditableXBlockMixin):
                 'static/css/walkthrough.css'
             ),
         )
-        fragment.add_javascript(_resource_string('static/js/src/walkthrough.js'))
+        fragment.add_javascript(
+            _resource_string('static/js/src/walkthrough.js')
+        )
         fragment.initialize_js('WalkthroughXBlock')
         return fragment
-
-    # TO-DO: change this handler to perform your own actions.  You may need more
-    # than one handler, or you may not need any handlers at all.
-    @XBlock.json_handler
-    def increment_count(self, data, suffix=''):
-        """
-        An example handler, which increments the data.
-        """
-        # Just to show data coming in...
-        assert data['hello'] == 'world'
-
-        self.count += 1
-        return {"count": self.count}
 
     # TO-DO: change this to create the scenarios you'd like to see in the
     # workbench while developing your XBlock.
