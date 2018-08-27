@@ -3,9 +3,7 @@ This is the core logic for the walkthrough xblock, which introduces students to
 a course through a digital tour.
 """
 import json
-import os
 from StringIO import StringIO
-from xml.dom import minidom
 import pkg_resources
 from django.template import Context
 from django.template.loader import get_template
@@ -14,6 +12,7 @@ from xblock.core import XBlock
 from xblock.fields import Scope, String
 from xblock.fragment import Fragment
 import xmltodict
+
 
 def _resource_string(path):
     """Handy helper for getting resources from our kit."""
@@ -117,6 +116,10 @@ class WalkthroughXBlock(XBlock):
         return fragment
 
     def studio_view(self, context=None):
+        """
+        The secondary view of the XBlock, shown to teachers
+        when editing the XBlock.
+        """
         context = context or {}
         context.update(
             {
@@ -137,7 +140,10 @@ class WalkthroughXBlock(XBlock):
         return fragment
 
     @XBlock.json_handler
-    def studio_submit(self, submissions, suffix=''):
+    def studio_submit(self, submissions):
+        """
+        Save studio edits.
+        """
         self.button_label = submissions['button_label']
         self.intro = submissions['intro']
         xml_content = submissions['steps']
